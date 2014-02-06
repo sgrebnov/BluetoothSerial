@@ -1,5 +1,5 @@
-cordova.define("com.megster.cordova.bluetoothserial.bluetoothSerial", function(require, exports, module) {/*global cordova*/
-    module.exports = {
+/*global cordova*/
+module.exports = {
         
     enable: function (success, failure) {        
         cordova.exec(success, failure, "BluetoothSerial", "enable", []);
@@ -75,4 +75,3 @@ cordova.define("com.megster.cordova.bluetoothserial.bluetoothSerial", function(r
     }
 
 };
-});
