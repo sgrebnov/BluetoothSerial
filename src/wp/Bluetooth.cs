@@ -236,12 +236,12 @@ namespace Cordova.Extension.Commands
         /// <param name="options"></param>
         public async void connect(string options)
         {
-            ConnectionOptions connectionOptions;
+            ConnectionOptions connectionOptions = new ConnectionOptions();
 
             try
             {
                 string[] args = JsonHelper.Deserialize<string[]>(options);
-                connectionOptions = JsonHelper.Deserialize<ConnectionOptions>(args[0]);
+                connectionOptions.Address = args[0];
             }
             catch (Exception)
             {
@@ -257,6 +257,12 @@ namespace Cordova.Extension.Commands
 
             try
             {
+
+                if (discoveredPeers == null)
+                {
+                    discoveredPeers = await PeerFinder.FindAllPeersAsync();
+                }
+
                 PeerInformation peer = null;
                 foreach (var discoveredDevice in discoveredPeers)
                 {
@@ -572,6 +578,59 @@ namespace Cordova.Extension.Commands
                 await dataWriter.StoreAsync();
 
                 dataWriter.WriteString(message);
+                await dataWriter.StoreAsync();
+
+                this.DispatchCommandResult(new PluginResult(PluginResult.Status.OK));
+            }
+            catch (Exception)
+            {
+                this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, "Error occurred while sending message"));
+            }
+        }
+
+        /// <summary>
+        /// Writes binary data via Bluetooth.
+        /// </summary>
+        /// <param name="message">Data to be sent.</param>
+        public async void write(string options)
+        {
+            List<byte> data;
+
+            try
+            {
+                string[] args = JsonHelper.Deserialize<string[]>(options);
+                data = JsonHelper.Deserialize<List<byte>>(args[0]);
+            }
+            catch (Exception)
+            {
+                this.DispatchCommandResult(new PluginResult(PluginResult.Status.JSON_EXCEPTION));
+                return;
+            }
+            
+            
+            if (data == null || data.Count == 0)
+            {
+                this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, "Data is null"));
+                return;
+            }
+
+            if (connectionSocket == null)
+            {
+                this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, "Socket is null. Check connection."));
+                return;
+            }
+
+            if (dataWriter == null)
+            {
+                dataWriter = new DataWriter(connectionSocket.OutputStream);
+            }
+
+            try
+            {
+                //dataWriter.WriteInt32(data.Count);
+                //await dataWriter.StoreAsync();
+
+                dataWriter.WriteBytes(data.ToArray());
                 await dataWriter.StoreAsync();
 
                 this.DispatchCommandResult(new PluginResult(PluginResult.Status.OK));
