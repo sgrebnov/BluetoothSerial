@@ -83,5 +83,13 @@
         <js-module src="src/windows8/BluetoothSerialProxy.js" name="BluetoothSerialProxy">
             <merges target="" />
         </js-module>
+
+        <config-file target="package.appxmanifest" parent="/Package/Capabilities">
+            <m2:DeviceCapability Name="bluetooth.rfcomm">
+                <m2:Device Id="any">
+                    <m2:Function Type="name:serialPort" />
+                </m2:Device>
+            </m2:DeviceCapability>
+        </config-file>
     </platform>
 </plugin>
