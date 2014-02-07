@@ -55,7 +55,7 @@ module.exports = {
 
             var data = args[0];
 
-            this.dataWriter.writeBytes(bytes);
+            this.dataWriter.writeBytes(data);
             this.dataWriter.storeAsync().done(success, fail);
 
         } catch(ex) {
