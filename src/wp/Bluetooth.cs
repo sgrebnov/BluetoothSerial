@@ -1,22 +1,22 @@
 ﻿/*  
-	Licensed under the Apache License, Version 2.0 (the "License");
-	you may not use this file except in compliance with the License.
-	You may obtain a copy of the License at
-	
-	http://www.apache.org/licenses/LICENSE-2.0
-	
-	Unless required by applicable law or agreed to in writing, software
-	distributed under the License is distributed on an "AS IS" BASIS,
-	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-	See the License for the specific language governing permissions and
-	limitations under the License.
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+    
+    http://www.apache.org/licenses/LICENSE-2.0
+    
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
 */
 
 /*
  Known issues:
-    •	Sometimes startAdvertising and discoverDevices functions return an error because native PeerFinder.start method throws an exception (SDK bug?)
-    •	If any plugin function was called after read function the app stops handling incoming messages. 
-    •	Connect function uses PeerInformation.DisplayName property to connect to found peer instead of using peer address because native PeerInformation.HostName property sometimes returns null value.
+    •   Sometimes startAdvertising and discoverDevices functions return an error because native PeerFinder.start method throws an exception (SDK bug?)
+    •   If any plugin function was called after read function the app stops handling incoming messages. 
+    •   Connect function uses PeerInformation.DisplayName property to connect to found peer instead of using peer address because native PeerInformation.HostName property sometimes returns null value.
 */
 
 using Microsoft.Phone.Shell;
@@ -236,7 +236,7 @@ namespace Cordova.Extension.Commands
         /// <param name="options"></param>
         public async void connect(string options)
         {
-            ConnectionOptions connectionOptions = new ConnectionOptions();
+            var connectionOptions = new ConnectionOptions {Type = ConnectionType.PhoneToDevice};
 
             try
             {
@@ -260,6 +260,7 @@ namespace Cordova.Extension.Commands
 
                 if (discoveredPeers == null)
                 {
+                    PeerFinder.AlternateIdentities["Bluetooth:PAIRED"] = "";
                     discoveredPeers = await PeerFinder.FindAllPeersAsync();
                 }
 
@@ -267,36 +268,41 @@ namespace Cordova.Extension.Commands
                 foreach (var discoveredDevice in discoveredPeers)
                 {
                     //TODO It seems PeerInformation.HostName property sometimes returns null. So we connect to a phone/device by name instead of host address
-                    if (discoveredDevice.DisplayName == connectionOptions.Address)
+                    if (string.Compare(discoveredDevice.DisplayName, connectionOptions.Address, StringComparison.OrdinalIgnoreCase) == 0)
                     {
                         peer = discoveredDevice;
+                        break;
                     }
                 }
 
-                if (peer != null)
+                if (peer == null)
                 {
-                    if (connectionOptions.Type == ConnectionType.PhoneToPhone)
-                    {
-                        connectionSocket = await PeerFinder.ConnectAsync(peer);        
-                    }
-                    else
-                    {
-                        //TODO this kind of connection has not been tested yet
-                        connectionSocket = new StreamSocket();
-                        await connectionSocket.ConnectAsync(peer.HostName, peer.ServiceName);                        
-                    }
+                    this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, "Unable to find the following peer: " + connectionOptions.Address));
+                    return;
+                }
 
-                    this.DispatchCommandResult(new PluginResult(PluginResult.Status.OK));
+                if (connectionOptions.Type == ConnectionType.PhoneToPhone)
+                {
+                    connectionSocket = await PeerFinder.ConnectAsync(peer);        
                 }
                 else
                 {
-                    this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, "Unable to find a peer with the following address: " + connectionOptions.Address));
+                    connectionSocket = new StreamSocket();
+                    await connectionSocket.ConnectAsync(peer.HostName, "1");
                 }
+
+                this.DispatchCommandResult(new PluginResult(PluginResult.Status.OK));
+                
                 
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, "Error occurred while connecting to the peer"));
+                var message = "Error occurred while connecting to the peer"; // default error message
+                if ((uint)ex.HResult == 0x8007048F)
+                {
+                    message = "Bluetooth is turned off";
+                }
+                this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, message));
             }
         }
 
@@ -683,6 +689,6 @@ namespace Cordova.Extension.Commands
             return dataReader.ReadString(messageLen);
         }
 
-        #endregion        
+        #endregion
     }
 }

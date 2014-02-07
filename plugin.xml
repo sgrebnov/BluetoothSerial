@@ -72,6 +72,10 @@
             </feature>
         </config-file>
 
+        <config-file target="Properties/WMAppManifest.xml" parent="/Deployment/App/Capabilities">
+            <Capability Name="ID_CAP_PROXIMITY"/>
+        </config-file>
+
         <source-file src="src/wp/Bluetooth.cs" />
     </platform>
 
