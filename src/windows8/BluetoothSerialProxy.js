@@ -5,7 +5,7 @@ module.exports = {
 
     connect: function (success, fail, args) {
         try {
-            var deviceName = args[0]; 
+            var deviceName = args[0].toLowerCase(); 
 
             // execute async
             setTimeout(function() {
@@ -13,31 +13,24 @@ module.exports = {
                 var sockets = Windows.Networking.Sockets;
                 var streams = Windows.Storage.Streams;
                 var query = rfcomm.RfcommDeviceService.getDeviceSelector(rfcomm.RfcommServiceId.serialPort);
-
                 var me = this;
-                // TODO - re-write
-                Windows.Devices.Enumeration.DeviceInformation.findAllAsync(query)
-                   .then(function (pairedDevices) {
-                       return new WinJS.Promise(function (complete, error, progress) {
-                           for (var idx = 0; idx < pairedDevices.length; idx++) {
-                               if (pairedDevices[idx].name.toLowerCase() == deviceName) {
-                                   rfcomm.RfcommDeviceService.fromIdAsync(pairedDevices[idx].id).then(function (device) {
-                                       if (device != null) {
-                                           complete(device);
-                                       }
-                                   });
-                               }
-                           };
-                       });
-                   }).then(function(device) {
-                       me.service = device;
-                       me.channel = new sockets.StreamSocket();
-                       return me.channel.connectAsync(me.service.connectionHostName, me.service.connectionServiceName, sockets.SocketProtectionLevel.plainSocket);
-               }).done(
-                   function() { // success
-                       me.dataWriter = new streams.DataWriter(me.channel.outputStream);
-                       success();
-                   }, fail);
+
+                Windows.Devices.Enumeration.DeviceInformation.findAllAsync(query, null)
+                    .then(function (pairedDevices) {
+                        for (var idx = 0; idx < pairedDevices.length; idx++) {
+                            if (pairedDevices[idx].name.toLowerCase() == deviceName) {
+                                return rfcomm.RfcommDeviceService.fromIdAsync(pairedDevices[idx].id);
+                            };
+                        }
+                        throw new Error('Device not found');
+                    }).then(function(device) {
+                        me.service = device;
+                        me.channel = new sockets.StreamSocket();
+                        return me.channel.connectAsync(me.service.connectionHostName, me.service.connectionServiceName, sockets.SocketProtectionLevel.plainSocket);
+                    }).done(function() { // success
+                        me.dataWriter = new streams.DataWriter(me.channel.outputStream);
+                        success();
+                    }, fail);
             },0);
 
         } catch(ex) {
