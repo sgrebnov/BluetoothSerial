@@ -45,8 +45,8 @@ module.exports = {
     },
 
     // read all the data in the buffer
-    read: function (success, failure) {
-        cordova.exec(success, failure, "BluetoothSerial", "read", []);
+    read: function (success, failure, numBytes) {
+        cordova.exec(success, failure, "BluetoothSerial", "read", typeof numBytes != 'undefined' ? [numBytes] : []);
     },
 
     // reads the data in the buffer up to and including the delimiter
