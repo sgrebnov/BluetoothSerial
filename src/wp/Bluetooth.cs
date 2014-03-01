@@ -19,6 +19,7 @@
     •   Connect function uses PeerInformation.DisplayName property to connect to found peer instead of using peer address because native PeerInformation.HostName property sometimes returns null value.
 */
 
+using System.Threading;
 using Microsoft.Phone.Shell;
 using Microsoft.Phone.Tasks;
 using System;
@@ -355,17 +356,19 @@ namespace Cordova.Extension.Commands
         }
 
         /// <summary>
-        /// Transfers message via connected socket.
+        /// Reads incoming message.
         /// </summary>
         /// <param name="options"></param>
-        public void send(string options)
+        public async void read(string options)
         {
-            ConnectionOptions connectionOptions;
+            uint numBytes;
+            string callbackId;
 
             try
             {
                 string[] args = JsonHelper.Deserialize<string[]>(options);
-                connectionOptions = JsonHelper.Deserialize<ConnectionOptions>(args[0]);
+                numBytes = JsonHelper.Deserialize<uint>(args[0]);
+                callbackId = args[1];
             }
             catch (Exception)
             {
@@ -373,39 +376,16 @@ namespace Cordova.Extension.Commands
                 return;
             }
 
-            if (string.IsNullOrEmpty(connectionOptions.Message))
-            {
-                this.DispatchCommandResult(new PluginResult(PluginResult.Status.JSON_EXCEPTION));
-            }
-
             try
             {
-                this.SendMessage(connectionOptions.Message);
-            }
-            catch (Exception)
-            {
-                this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, "Error occurred while sending message"));
-            }
-            
-        }
+                var bytes = await ReadBytesAsync(numBytes);
 
-        /// <summary>
-        /// Reads incoming message.
-        /// </summary>
-        /// <param name="options"></param>
-        public void read(string options)
-        {
-            if (!this.isListeningEnabled)
-            {
-                this.isListeningEnabled = true;
-                this.ListenToIncomingMessage();    
+                this.DispatchCommandResult(new PluginResult(PluginResult.Status.OK, bytes), callbackId);
             }
-            else
+            catch (Exception ex)
             {
-                PluginResult result = new PluginResult(PluginResult.Status.OK);
-                result.KeepCallback = true;
-                this.DispatchCommandResult(result);
-            }            
+                this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, ex.Message));
+            }
         }
 
         #endregion
@@ -553,47 +533,6 @@ namespace Cordova.Extension.Commands
 
         #endregion
 
-        #region message trasferring methods
-
-        /// <summary>
-        /// Sends text message via Bluetooth.
-        /// </summary>
-        /// <param name="message">Data to be sent.</param>
-        private async void SendMessage(string message)
-        {
-            if (string.IsNullOrEmpty(message))
-            {
-                this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, "Data is null"));
-                return;
-            }
-
-            if (connectionSocket == null)
-            {
-                this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, "Socket is null"));
-                return;
-            }
-
-            if (dataWriter == null)
-            {
-                dataWriter = new DataWriter(connectionSocket.OutputStream);
-            }
-
-            try
-            {
-                dataWriter.WriteInt32(message.Length);
-                await dataWriter.StoreAsync();
-
-                dataWriter.WriteString(message);
-                await dataWriter.StoreAsync();
-
-                this.DispatchCommandResult(new PluginResult(PluginResult.Status.OK));
-            }
-            catch (Exception)
-            {
-                this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, "Error occurred while sending message"));
-            }
-        }
-
         /// <summary>
         /// Writes binary data via Bluetooth.
         /// </summary>
@@ -602,10 +541,13 @@ namespace Cordova.Extension.Commands
         {
             List<byte> data;
 
+            string callbackId;
+
             try
             {
                 string[] args = JsonHelper.Deserialize<string[]>(options);
                 data = JsonHelper.Deserialize<List<byte>>(args[0]);
+                callbackId = args[1];
             }
             catch (Exception)
             {
@@ -633,13 +575,11 @@ namespace Cordova.Extension.Commands
 
             try
             {
-                //dataWriter.WriteInt32(data.Count);
-                //await dataWriter.StoreAsync();
 
                 dataWriter.WriteBytes(data.ToArray());
-                await dataWriter.StoreAsync();
+                dataWriter.StoreAsync();
 
-                this.DispatchCommandResult(new PluginResult(PluginResult.Status.OK));
+                this.DispatchCommandResult(new PluginResult(PluginResult.Status.OK), callbackId);
             }
             catch (Exception)
             {
@@ -647,48 +587,28 @@ namespace Cordova.Extension.Commands
             }
         }
 
-        /// <summary>
-        /// Listens to incoming message from the connected peer
-        /// </summary>
-        private async void ListenToIncomingMessage()
-        {
-            if (!this.isListeningEnabled)
-            {
-                return;
-            }
+        static ManualResetEvent readHandler = new ManualResetEvent(true);
 
-            try
-            {
-                var message = await GetMessage();
-                PluginResult result = new PluginResult(PluginResult.Status.OK, JsonHelper.Serialize(message));
-                result.KeepCallback = true;
-                this.DispatchCommandResult(result);
-                ListenToIncomingMessage();
-            }
-            catch (Exception)
-            {
-                this.DispatchCommandResult(new PluginResult(PluginResult.Status.ERROR, "Error occurred while reading message"));
-            }
-        }
-
-        /// <summary>
-        /// Processes incoming message 
-        /// </summary>
-        /// <returns>incoming message</returns>
-        private async Task<string> GetMessage()
+        private async Task<byte[]> ReadBytesAsync(uint numBytes)
         {
             if (dataReader == null)
             {
                 dataReader = new DataReader(connectionSocket.InputStream);
             }
+            byte[] buffer = new byte[numBytes];
 
-            await dataReader.LoadAsync(4);
-            uint messageLen = (uint)dataReader.ReadInt32();
-
-            await dataReader.LoadAsync(messageLen);
-            return dataReader.ReadString(messageLen);
+            readHandler.WaitOne();
+            try
+            {
+                await dataReader.LoadAsync(numBytes);
+                dataReader.ReadBytes(buffer);
+            }
+            finally
+            {
+                readHandler.Set();
+            }
+            return buffer;
         }
 
-        #endregion
     }
 }
