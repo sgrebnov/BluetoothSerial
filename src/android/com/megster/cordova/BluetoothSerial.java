@@ -102,8 +102,12 @@ public class BluetoothSerial extends CordovaPlugin {
 
         } else if (action.equals(WRITE)) {
 
-            String data = args.getString(0);
-            bluetoothSerialService.write(data.getBytes());
+            // TODO refactor
+            byte[] data = new byte[args.getJSONArray(0).length()];
+            for (int idx  = 0; idx < args.getJSONArray(0).length(); idx ++) {
+                data[idx] = (byte)args.getJSONArray(0).getInt(idx);
+            }
+            bluetoothSerialService.write(data);
             callbackContext.success();
 
         } else if (action.equals(AVAILABLE)) {
@@ -112,7 +116,12 @@ public class BluetoothSerial extends CordovaPlugin {
 
         } else if (action.equals(READ)) {
 
-            callbackContext.success(read());
+            try {
+                callbackContext.success(read(args));
+            } catch (InterruptedException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
 
         } else if (action.equals(READ_UNTIL)) {
 
@@ -190,8 +199,26 @@ public class BluetoothSerial extends CordovaPlugin {
     }
 
     private void connect(CordovaArgs args, boolean secure, CallbackContext callbackContext) throws JSONException {
-        String macAddress = args.getString(0);
-        BluetoothDevice device = bluetoothAdapter.getRemoteDevice(macAddress);
+        String macAddress = args.getString(0).toUpperCase();
+        BluetoothDevice device = null;
+        if (BluetoothAdapter.checkBluetoothAddress(macAddress)) {
+            device = bluetoothAdapter.getRemoteDevice(macAddress);
+        }
+        else {
+            // parameter represents device name, not macAddress
+            Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+            // If there are paired devices
+            if (pairedDevices.size() > 0) {
+                // Loop through paired devices
+                for (BluetoothDevice pairedDevice : pairedDevices) {
+                    // Add the name and address to an array adapter to show in a ListView
+                    if (pairedDevice.getName().toUpperCase().equals(macAddress)) {
+                        device = bluetoothAdapter.getRemoteDevice(pairedDevice.getAddress());
+                        break;
+                    }
+                }
+            }
+        }
 
         if (device != null) {
             connectCallback = callbackContext;
@@ -285,11 +312,19 @@ public class BluetoothSerial extends CordovaPlugin {
         return buffer.length();
     }
 
-    private String read() {
-        int length = buffer.length();
-        String data = buffer.substring(0, length);
-        buffer.delete(0, length);
-        return data;
+    private synchronized String read(CordovaArgs args) throws JSONException, InterruptedException {
+        
+        int numBytes = args.getInt(0);
+        // todo use built-in android sync queue
+        while (true){
+            if (buffer.length() < numBytes) {
+                Thread.sleep(200);
+                continue;
+            }
+            String data = buffer.substring(0, numBytes);
+            buffer.delete(0, numBytes);
+            return data;
+        }
     }
 
     private String readUntil(String c) {
